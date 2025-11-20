@@ -14,7 +14,7 @@ jobs:
       pull-requests: write
 
     steps:
-      # 1. Checkout the repo where PR was opened
+      # 1. Checkout current microservice repo
       - name: Checkout current repo
         uses: actions/checkout@v4
 
@@ -25,7 +25,7 @@ jobs:
           repository: simpsonorg/impact-ai-engine
           path: impact-ai-engine
 
-      # 3. Clone all microservices
+      # 3. Clone all microservices (dependency graph sources)
       - name: Clone all microservice repos
         run: |
           git clone https://github.com/simpsonorg/ui-account-load
@@ -51,54 +51,47 @@ jobs:
         id: changes
         uses: tj-actions/changed-files@v45
 
-      # 7. Run Impact Analysis engine
+      # 7. Run Impact Analysis Engine
       - name: Run Impact Analysis
         id: impact
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # ORG-level secret OK
           PR_TITLE: ${{ github.event.pull_request.title }}
           REPOS_BASE_DIR: ${{ github.workspace }}
           CHANGED_FILES: ${{ join(steps.changes.outputs.all_changed_files, '\n') }}
         run: |
           python impact-ai-engine/run_analysis.py > impact_report.md
-
           echo "REPORT<<EOF" >> $GITHUB_OUTPUT
           cat impact_report.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # 8. Install jq (needed for safe JSON escaping)
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      # 9. Post PR Comment — curl-based, JS-free, 100% safe
-      - name: Post PR Comment (curl, JS-free)
+      # 8. Post PR Comment (JS-safe)
+      - name: Post PR Comment
+        uses: actions/github-script@v7
         env:
           REPORT: ${{ steps.impact.outputs.REPORT }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          OWNER: ${{ github.event.pull_request.base.repo.owner.login }}
-          REPO: ${{ github.event.pull_request.base.repo.name }}
-        run: |
-          echo "=== RAW REPORT FROM AI ENGINE ==="
-          echo "$REPORT"
-          echo "================================="
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            let body = process.env.REPORT || "";
 
-          if [ -z "$REPORT" ]; then
-            REPORT="**Impact Analysis:** No output generated."
-          fi
+            // fallback protection
+            if (!body.trim()) {
+              body = "**Impact Analysis:** No output generated.";
+            }
 
-          JSON_PAYLOAD=$(jq -n --arg body "$REPORT" '{body: $body}')
+            const owner = context.payload.pull_request.base.repo.owner.login;
+            const repo  = context.payload.pull_request.base.repo.name;
+            const pr    = context.payload.pull_request.number;
 
-          echo "Posting comment to GitHub API: https://api.github.com/repos/$OWNER/$REPO/issues/$PR_NUMBER/comments"
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pr,
+              body
+            });
 
-          curl -s -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/$OWNER/$REPO/issues/$PR_NUMBER/comments \
-            -d "$JSON_PAYLOAD"
-
-      # 10. Debug report for logs
+      # 9. Debug report (for troubleshooting)
       - name: Debug REPORT output
         run: |
           echo "----- REPORT CONTENT START -----"
