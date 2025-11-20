@@ -1,0 +1,6 @@
+networkx
+openai
+google-generativeai
+faiss-cpu
+numpy
+httpx
