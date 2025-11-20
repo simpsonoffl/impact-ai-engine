@@ -67,23 +67,36 @@ jobs:
           cat impact_report.md >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      # 8. Post PR Comment (SAFE VERSION – CANNOT BREAK)
+      # 8. Post PR Comment (100% SAFE)
       - name: Post PR Comment
         uses: actions/github-script@v7
+        env:
+          REPORT: ${{ steps.impact.outputs.REPORT }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const raw = `${{ steps.impact.outputs.REPORT }}`;
-            // Wrap in fenced code block to avoid JS parsing issues
-            const safe = "## Impact Analysis Report\n\n```\n" + raw + "\n```";
+            let body = process.env.REPORT || "";
+
+            // Fallback to avoid 422 errors
+            if (!body.trim()) {
+              body = "**Impact Analysis:** No output was generated.";
+            }
+
+            // Wrap safely (optional)
+            const safe = "## Impact Analysis Report\n\n" + body;
+
+            const owner = context.payload.pull_request.base.repo.owner.login;
+            const repo  = context.payload.pull_request.base.repo.name;
+            const pr    = context.payload.pull_request.number;
+
             await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.name,
-              issue_number: context.issue.number,
+              owner,
+              repo,
+              issue_number: pr,
               body: safe
             });
 
-            
+      # 9. Debug output for troubleshooting
       - name: Debug REPORT output
         run: |
           echo "----- REPORT CONTENT START -----"
