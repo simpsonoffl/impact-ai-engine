@@ -68,7 +68,11 @@ jobs:
             const repo  = context.payload.pull_request.base.repo.name;
             const pr    = context.payload.pull_request.number;
 
-            const body = `${{ steps.impact.outputs.REPORT }}`;
+            let body = `${{ steps.impact.outputs.REPORT }}`.trim();
+
+            if (!body) {
+              body = "**Impact Analysis:** No changes detected or analysis produced no output.";
+            }
 
             await github.rest.issues.createComment({
               owner,
@@ -76,3 +80,9 @@ jobs:
               issue_number: pr,
               body
             });
+            
+      - name: Debug REPORT output
+        run: |
+          echo "----- REPORT CONTENT START -----"
+          echo "${{ steps.impact.outputs.REPORT }}"
+          echo "----- REPORT CONTENT END -----"
