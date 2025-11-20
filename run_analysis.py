@@ -5,6 +5,7 @@ import re
 import json
 import traceback
 from datetime import datetime
+from analyzer.impact_analyzer import analyze
 
 # ---------------------------------------------
 # OpenAI Client (New API format)
@@ -205,7 +206,7 @@ def run_analysis():
 
     # AI section
     report.append("## AI Analysis")
-    ai_output = llm_analysis(pr_title, changed_files, graph)
+    ai_output = analyze(pr_title, changed_files, graph)
     report.append(ai_output)
 
     return "\n".join(report)
